@@ -31,7 +31,6 @@ func TestReadDir(t *testing.T) {
 		t.Fatal(fr)
 	}
 	t.Errorf("%+v", finfo)
-	// t.Error(vfsDiff())
 }
 
 func testOpen(t *testing.T) {
