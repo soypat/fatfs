@@ -25,8 +25,8 @@ func TestCurrent(t *testing.T) {
 func testReadDir(t *testing.T, tls *libc.TLS) int32 {
 	defer resetVFS()
 
-	var fss FATFS
-	fr := Mount(tls, &fss, "ram", 1)
+	fss := new(FATFS)
+	fr := Mount(tls, fss, "ram", 1)
 	mustBeOK(t, fr)
 
 	var dp DIR

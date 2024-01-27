@@ -1,29 +1,53 @@
 package fatfs
 
 import (
+	"runtime"
 	"unsafe"
 
 	"modernc.org/libc"
 )
 
+const enablePinning = true
+
+var pins runtime.Pinner
+
 func Mount(tls *libc.TLS, fs *FATFS, path string, opt byte) FRESULT {
+	if enablePinning {
+		pins.Pin(fs)
+		defer pins.Unpin()
+	}
 	_fs := (uintptr)(unsafe.Pointer(fs))
 	_path, _ := libc.CString(path)
+
 	return f_mount(tls, _fs, _path, opt)
 }
 
 func Open(tls *libc.TLS, fp *FIL, path string, mode uint8) FRESULT {
+	if enablePinning {
+		pins.Pin(fp)
+		defer pins.Unpin()
+	}
 	_fp := (uintptr)(unsafe.Pointer(fp))
 	_path, _ := libc.CString(path)
 	return f_open(tls, _fp, _path, mode)
 }
 
 func Close(tls *libc.TLS, fp *FIL) FRESULT {
+	if enablePinning {
+		pins.Pin(fp)
+		defer pins.Unpin()
+	}
 	_fp := (uintptr)(unsafe.Pointer(fp))
 	return f_close(tls, _fp)
 }
 
 func Read(tls *libc.TLS, fp *FIL, buf []byte) (n int, fr FRESULT) {
+	if enablePinning {
+		pins.Pin(fp)
+		pins.Pin(&buf[0])
+		pins.Pin(&n)
+		defer pins.Unpin()
+	}
 	_fp := (uintptr)(unsafe.Pointer(fp))
 	_buf := (uintptr)(unsafe.Pointer(&buf[0]))
 	_br := (uintptr)(unsafe.Pointer(&n))
@@ -32,6 +56,12 @@ func Read(tls *libc.TLS, fp *FIL, buf []byte) (n int, fr FRESULT) {
 }
 
 func Write(tls *libc.TLS, fp *FIL, buf []byte) (n int, fr FRESULT) {
+	if enablePinning {
+		pins.Pin(fp)
+		pins.Pin(&buf[0])
+		pins.Pin(&n)
+		defer pins.Unpin()
+	}
 	_fp := (uintptr)(unsafe.Pointer(fp))
 	_buf := (uintptr)(unsafe.Pointer(&buf[0]))
 	_bw := (uintptr)(unsafe.Pointer(&n))
@@ -40,17 +70,30 @@ func Write(tls *libc.TLS, fp *FIL, buf []byte) (n int, fr FRESULT) {
 }
 
 func Sync(tls *libc.TLS, fp *FIL) FRESULT {
+	if enablePinning {
+		pins.Pin(fp)
+		defer pins.Unpin()
+	}
 	_fp := (uintptr)(unsafe.Pointer(fp))
 	return f_sync(tls, _fp)
 }
 
 func OpenDir(tls *libc.TLS, dp *DIR, path string) FRESULT {
+	if enablePinning {
+		pins.Pin(dp)
+		defer pins.Unpin()
+	}
 	_dp := (uintptr)(unsafe.Pointer(dp))
 	_path, _ := libc.CString(path)
 	return f_opendir(tls, _dp, _path)
 }
 
 func ReadDir(tls *libc.TLS, dp *DIR, fno *FILINFO) (fr FRESULT) {
+	if enablePinning {
+		pins.Pin(dp)
+		pins.Pin(fno)
+		defer pins.Unpin()
+	}
 	_dp := (uintptr)(unsafe.Pointer(dp))
 	_fno := (uintptr)(unsafe.Pointer(fno))
 	fr = f_readdir(tls, _dp, _fno)
