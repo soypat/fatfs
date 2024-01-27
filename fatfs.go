@@ -295,7 +295,7 @@ type FILINFO = struct {
 	fdate   WORD
 	ftime   WORD
 	fattrib BYTE
-	altname [13]TCHAR
+	altname [13]byte
 	fname   [256]TCHAR
 }
 
@@ -1991,10 +1991,12 @@ func get_fileinfo(tls *libc.TLS, dp uintptr, fno uintptr) {
 		} /* Broken surrogate pair? */
 		*(*TCHAR)(unsafe.Pointer(fno + 22 + uintptr(di))) = 0 /* Terminate the LFN (null string means LFN is invalid) */
 	}
+	
 	v3 = libc.Uint32FromInt32(0)
 	di = v3
 	si = v3
 	for si < uint32(11) { /* Get SFN from SFN entry */
+		
 		v4 = si
 		si++
 		wc = uint16(*(*BYTE)(unsafe.Pointer((*DIR)(unsafe.Pointer(dp)).dir + uintptr(v4)))) /* Get a char */
@@ -2009,17 +2011,22 @@ func get_fileinfo(tls *libc.TLS, dp uintptr, fno uintptr) {
 			di++
 			*(*TCHAR)(unsafe.Pointer(fno + 9 + uintptr(v5))) = int8('.')
 		} /* Insert a . if extension is exist */
-		if dbc_1st(tls, uint8(uint8(wc))) != 0 && si != uint32(8) && si != uint32(11) && dbc_2nd(tls, *(*BYTE)(unsafe.Pointer((*DIR)(unsafe.Pointer(dp)).dir + uintptr(si)))) != 0 { /* Make a DBC if needed */
+		b1 :=  dbc_1st(tls, uint8(uint8(wc))) != 0
+		b2 :=  dbc_2nd(tls, *(*BYTE)(unsafe.Pointer((*DIR)(unsafe.Pointer(dp)).dir + uintptr(si)))) != 0
+		if  b1&& si != uint32(8) && si != uint32(11) &&b2 { /* Make a DBC if needed */
 			v6 = si
 			si++
 			wc = uint16(int32(int32(wc))<<int32(8) | int32(*(*BYTE)(unsafe.Pointer((*DIR)(unsafe.Pointer(dp)).dir + uintptr(v6)))))
 		}
 		wc = ff_oem2uni(tls, wc, uint16(FF_CODE_PAGE)) /* ANSI/OEM -> Unicode */
+		
 		if int32(int32(wc)) == 0 {                     /* Wrong char in the current code page? */
 			di = uint32(0)
 			break
 		}
+		
 		nw = put_utf(tls, uint32(uint32(wc)), fno+9+uintptr(di), uint32(FF_SFN_BUF)-di) /* Store it in API encoding */
+		// fmt.Printf("%q %v %v %c %d %d\n",fnoo.altname[:],b1,b2,wc,nw,di)
 		if nw == uint32(0) {                                                            /* Buffer overflow? */
 			di = uint32(0)
 			break

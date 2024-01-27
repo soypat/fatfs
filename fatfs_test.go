@@ -13,7 +13,6 @@ import (
 )
 
 func TestCurrent(t *testing.T) {
-
 	runtime.LockOSThread()
 	tls := libc.NewTLS()
 	defer tls.Close()
