@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"maps"
+	"os"
 	"runtime"
 	"testing"
 	"unsafe"
@@ -11,51 +12,56 @@ import (
 	"modernc.org/libc"
 )
 
-func TestReadDir(t *testing.T) {
-	loadVFS()
+func TestCurrent(t *testing.T) {
+
+	runtime.LockOSThread()
 	tls := libc.NewTLS()
-	var fss FATFS
-	fr := Mount(tls, &fss, "ram", 1)
-	if fr != FR_OK {
-		t.Fatal(fr)
-	}
-	const mode = FA_READ
-	var dp DIR
-	fr = OpenDir(tls, &dp, "rootdir")
-	if fr != FR_OK {
-		t.Fatal(fr)
-	}
-	var finfo FILINFO
-	fr = ReadDir(tls, &dp, &finfo)
-	if fr != FR_OK {
-		t.Fatal(fr)
-	}
-	t.Errorf("%+v", finfo)
+	defer tls.Close()
+	libc.SetEnviron(tls, os.Environ())
+	loadVFS()
+	testReadDir(t, tls)
+	testOpen(t, tls)
 }
 
-func testOpen(t *testing.T) {
-	loadVFS()
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	tls := libc.NewTLS()
+func testReadDir(t *testing.T, tls *libc.TLS) int32 {
+	defer resetVFS()
+
+	var fss FATFS
+	fr := Mount(tls, &fss, "ram", 1)
+	mustBeOK(t, fr)
+
+	var dp DIR
+	fr = OpenDir(tls, &dp, "rootdir")
+	mustBeOK(t, fr)
+
+	var finfo FILINFO
+	fr = ReadDir(tls, &dp, &finfo)
+	mustBeOK(t, fr)
+
+	return 0
+}
+
+func testOpen(t *testing.T, tls *libc.TLS) {
+	defer resetVFS()
 	var fs FATFS
 	fr := Mount(tls, &fs, "ram", 1)
-	if fr != FR_OK {
-		t.Fatal(fr)
-	}
+	mustBeOK(t, fr)
+
 	const mode = FA_READ
 	var fil FIL
 	fr = Open(tls, &fil, "rootfile", mode)
-	if fr != FR_OK {
-		t.Fatal(fr)
-	}
+	mustBeOK(t, fr)
 
 	var dp DIR
 	fr = OpenDir(tls, &dp, "rootdir")
+	mustBeOK(t, fr)
+}
+
+func mustBeOK(t *testing.T, fr FRESULT) {
+	t.Helper()
 	if fr != FR_OK {
-		t.Fatal(fr)
+		t.Fatal("fatalfr:", fr)
 	}
-	// t.Error(vfsDiff())
 }
 
 func vfsDiff() string {
@@ -67,6 +73,10 @@ func vfsDiff() string {
 		}
 	}
 	return diff
+}
+
+func resetVFS() {
+	fatInit = maps.Clone(fatInitCopy)
 }
 
 func loadVFS() {
