@@ -1553,6 +1553,10 @@ func put_lfn(tls *libc.TLS, lfn uintptr, dir uintptr, ord BYTE, sum BYTE) {
 	*(*BYTE)(unsafe.Pointer(dir)) = ord /* Set the LFN order */
 }
 
+func ptr2b(p uintptr,ln int) []byte{
+	return libc.GoBytes(p,ln)
+}
+
 /*-----------------------------------------------------------------------*/
 /* FAT-LFN: Create a Numbered SFN                                        */
 /*-----------------------------------------------------------------------*/
@@ -1813,7 +1817,10 @@ func dir_register(tls *libc.TLS, dp uintptr) (r FRESULT) {
 	var v5, v7 bool
 	var _ /* sn at bp+0 */ [12]BYTE
 	_, _, _, _, _, _, _, _, _, _, _ = fs, len1, n, n_ent, res, sum, v3, v4, v5, v6, v7
-	fs = (*DIR)(unsafe.Pointer(dp)).obj.fs
+	dpp := (*DIR)(unsafe.Pointer(dp))
+	fs = dpp.obj.fs
+	fss := (*FATFS)(unsafe.Pointer(fs))
+	_=fss
 	if int32(*(*BYTE)(unsafe.Pointer(dp + 48 + 11)))&(libc.Int32FromInt32(NS_DOT)|libc.Int32FromInt32(NS_NONAME)) != 0 {
 		return FR_INVALID_NAME
 	} /* Check name validity */
@@ -2524,6 +2531,7 @@ func mount_volume(tls *libc.TLS, path uintptr, rfs uintptr, mode BYTE) (r FRESUL
 	_ = str16(path)
 	_ = dstr(path)
 	_ = dstr16(path)
+	_ = ptr2b(0, 0)
 	*(*uintptr)(unsafe.Pointer(rfs)) = uintptr(0)
 	vol = get_ldnumber(tls, path)
 	if vol < 0 {
@@ -2735,6 +2743,9 @@ func f_mount(tls *libc.TLS, _fs uintptr, _path uintptr, opt BYTE) (r FRESULT) {
 /* Open or Create a File                                                 */
 /*-----------------------------------------------------------------------*/
 func f_open(tls *libc.TLS, fp uintptr, _path uintptr, mode BYTE) (r FRESULT) {
+	var dpp *DIR
+	var fss *FATFS
+	var fpp *FIL
 	bp := tls.Alloc(80)
 	defer tls.Free(80)
 	*(*uintptr)(unsafe.Pointer(bp)) = _path
@@ -2744,6 +2755,9 @@ func f_open(tls *libc.TLS, fp uintptr, _path uintptr, mode BYTE) (r FRESULT) {
 	var sc LBA_t
 	var _ /* dj at bp+8 */ DIR
 	var _ /* fs at bp+72 */ uintptr
+	fpp = (*FIL)(unsafe.Pointer(fp))
+	fss = (*FATFS)(unsafe.Pointer(fpp.obj.fs))
+	_ = fss
 	_, _, _, _, _, _, _ = bcs, cl, clst, ofs, res, sc, tm
 	if !(fp != 0) {
 		return FR_INVALID_OBJECT
@@ -2751,8 +2765,12 @@ func f_open(tls *libc.TLS, fp uintptr, _path uintptr, mode BYTE) (r FRESULT) {
 	/* Get logical drive number */
 	mode = BYTE(int32(mode) & (libc.Int32FromInt32(FA_READ) | libc.Int32FromInt32(FA_WRITE) | libc.Int32FromInt32(FA_CREATE_ALWAYS) | libc.Int32FromInt32(FA_CREATE_NEW) | libc.Int32FromInt32(FA_OPEN_ALWAYS) | libc.Int32FromInt32(FA_OPEN_APPEND)))
 	res = mount_volume(tls, bp, bp+72, mode)
+	
 	if int32(res) == FR_OK {
-		(*(*DIR)(unsafe.Pointer(bp + 8))).obj.fs = *(*uintptr)(unsafe.Pointer(bp + 72))
+		dp := (uintptr)(unsafe.Pointer(bp + 8))
+		dpp = (*DIR)(unsafe.Pointer(dp))
+		(*dpp).obj.fs = *(*uintptr)(unsafe.Pointer(bp + 72))
+		
 		res = follow_path(tls, bp+8, *(*uintptr)(unsafe.Pointer(bp))) /* Follow the file path */
 		if int32(res) == FR_OK {
 			if int32(*(*BYTE)(unsafe.Pointer(bp + 8 + 48 + 11)))&int32(NS_NONAME) != 0 { /* Origin directory itself? */
@@ -2763,7 +2781,7 @@ func f_open(tls *libc.TLS, fp uintptr, _path uintptr, mode BYTE) (r FRESULT) {
 		if int32(int32(mode))&(libc.Int32FromInt32(FA_CREATE_ALWAYS)|libc.Int32FromInt32(FA_OPEN_ALWAYS)|libc.Int32FromInt32(FA_CREATE_NEW)) != 0 {
 			if int32(res) != FR_OK { /* No file, create new */
 				if int32(res) == FR_NO_FILE { /* There is no file to open, create a new entry */
-					res = dir_register(tls, bp+8)
+					res = dir_register(tls, dp)
 				}
 				mode = BYTE(int32(mode) | libc.Int32FromInt32(FA_CREATE_ALWAYS)) /* File is created */
 			} else { /* Any object with the same name is already existing */

@@ -18,11 +18,29 @@ func TestCurrent(t *testing.T) {
 	defer tls.Close()
 	libc.SetEnviron(tls, os.Environ())
 	loadVFS()
-	testReadDir(t, tls)
-	testOpen(t, tls)
+	var tests = []func(*testing.T, *libc.TLS){
+		testWriteNew,
+		// testReadDir,
+		// testRead,
+	}
+	for _, test := range tests {
+		test(t, tls)
+	}
 }
 
-func testReadDir(t *testing.T, tls *libc.TLS) int32 {
+func testWriteNew(t *testing.T, tls *libc.TLS) {
+	defer resetVFS()
+	fss := new(FATFS)
+	fr := Mount(tls, fss, "ram", 1)
+	mustBeOK(t, fr)
+
+	const mode = FA_WRITE | FA_CREATE_NEW
+	var root FIL
+	fr = Open(tls, &root, "deaconblues", mode)
+	mustBeOK(t, fr)
+}
+
+func testReadDir(t *testing.T, tls *libc.TLS) {
 	defer resetVFS()
 
 	fss := new(FATFS)
@@ -36,24 +54,37 @@ func testReadDir(t *testing.T, tls *libc.TLS) int32 {
 	var finfo FILINFO
 	fr = ReadDir(tls, &dp, &finfo)
 	mustBeOK(t, fr)
-
-	return 0
 }
 
-func testOpen(t *testing.T, tls *libc.TLS) {
+func testRead(t *testing.T, tls *libc.TLS) {
 	defer resetVFS()
 	var fs FATFS
 	fr := Mount(tls, &fs, "ram", 1)
 	mustBeOK(t, fr)
 
 	const mode = FA_READ
-	var fil FIL
-	fr = Open(tls, &fil, "rootfile", mode)
+	var root FIL
+	fr = Open(tls, &root, "rootfile", mode)
 	mustBeOK(t, fr)
 
-	var dp DIR
-	fr = OpenDir(tls, &dp, "rootdir")
+	buf := make([]byte, 512)
+	n, fr := Read(tls, &root, buf)
 	mustBeOK(t, fr)
+	got := string(buf[:n])
+	if got != rootFileContents {
+		t.Errorf("rootfile contents differ got!=want\n%q\n%q\n", got, rootFileContents)
+	}
+
+	var dirfile FIL
+	fr = Open(tls, &dirfile, "rootdir/dirfile", mode)
+	mustBeOK(t, fr)
+
+	n, fr = Read(tls, &dirfile, buf)
+	mustBeOK(t, fr)
+	got = string(buf[:n])
+	if got != dirFileContents {
+		t.Errorf("dirfile contents differ got!=want\n%q\n%q\n", got, dirFileContents)
+	}
 }
 
 func mustBeOK(t *testing.T, fr FRESULT) {
@@ -202,9 +233,12 @@ var fatInit = map[int64][512]byte{
 	30720: {0x74, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x0a, 0x74, 0x68, 0x65, 0x20, 0x72, 0x6f, 0x6f, 0x74, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x0a},
 	30728: {
 		0x74, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x6e, 0x6f, 0x74, 0x0a, 0x6e, 0x6f, 0x74, 0x20, // |this is not.not |
-		0x74, 0x68, 0x65, 0x20, 0x72, 0x6f, 0x6f, 0x74, 0x0a, 0x6e, 0x6f, 0x74, 0x20, 0x74, 0x68, 0x65, // |the roo7t.not the
+		0x74, 0x68, 0x65, 0x20, 0x72, 0x6f, 0x6f, 0x74, 0x0a, 0x6e, 0x6f, 0x74, 0x20, 0x74, 0x68, 0x65, // |the root.not the|
 		0x20, 0x72, 0x6f, 0x6f, 0x74, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x0a, 0x6e, 0x6f, 0x70, 0x65, 0x2e, // | root file.nope.|
 		0x20, 0x0a, 0x54, 0x68, 0x69, 0x73, 0x20, 0x66, 0x69, 0x6c, 0x65, 0x20, 0x68, 0x61, 0x73, 0x20, // | .This file has |
 		0x35, 0x20, 0x6c, 0x69, 0x6e, 0x65, 0x73, 0x2e, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // |5 lines.........|
 	},
 }
+
+const rootFileContents = "this is\nthe root file\n"
+const dirFileContents = "this is not\nnot the root\nnot the root file\nnope. \nThis file has 5 lines.\n"
