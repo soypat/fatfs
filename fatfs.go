@@ -2793,6 +2793,7 @@ func f_open(tls *libc.TLS, fp uintptr, _path uintptr, mode BYTE) (r FRESULT) {
 					} /* Cannot create as new file */
 				}
 			}
+
 			if int32(res) == FR_OK && int32(int32(mode))&int32(FA_CREATE_ALWAYS) != 0 { /* Truncate the file if overwrite mode */
 				/* Set directory entry initial state */
 				tm = get_fattime(tls) /* Set created time */
